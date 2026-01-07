@@ -1,0 +1,10 @@
+.app-root {
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #05070b;
+      color: #e0e0e0;
+      font-family: system-ui, sans-serif;
+}
