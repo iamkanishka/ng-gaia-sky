@@ -1,0 +1,10 @@
+{
+  "/esa-tap": {
+    "target": "https://gea.esac.esa.int",
+    "secure": true,
+    "changeOrigin": true,
+    "pathRewrite": {
+      "^/esa-tap": "/tap-server/tap/sync"
+    }
+  }
+}
