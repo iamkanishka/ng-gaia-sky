@@ -1,1 +1,7 @@
-<app-sky></app-sky>
+<app-sky [year]="currentYear"></app-sky>
+<app-inspector
+  [star]="selectedStar"
+  [papers]="selectedStar?.papers">
+</app-inspector>
+<app-time-slider (yearChange)="onYearChange($event)"></app-time-slider>
+<app-magnitude-slider (limitChange)="currentMagLimit = $event"> </app-magnitude-slider>
