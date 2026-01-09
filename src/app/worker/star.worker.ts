@@ -11,6 +11,8 @@ import { yearsSinceEpoch } from '../astro/time';
 
 addEventListener('message', ({ data }) => {
   const { stars, year, magLimit, exoHosts } = data;
+  console.log(stars, year, magLimit, exoHosts);
+  
   const exoSet = new Set<string>(exoHosts ?? []);
 
   const positions: number[] = [];
@@ -56,7 +58,9 @@ addEventListener('message', ({ data }) => {
     const density = galacticDensity(x, y, z);
     const flux = baseFlux * density * perceptualWeight;
 
-    const brightness = Math.min(1, flux * 3e5);
+    // const brightness = Math.min(1, flux * 3e5);
+
+    const brightness = 0.8;
 
     hostFlags.push(isHost ? 1 : 0);
     positions.push(x, y, z);
