@@ -2,76 +2,57 @@
 
 import { radecToGalactic, galacticToCartesian } from '../astro/coordinates';
 import { toObserverFrame } from '../astro/observer';
-import { absoluteMagnitude, apparentMagnitude, fluxFromMagnitude } from '../astro/photometry';
-import { extinctionMagnitude } from '../astro/extinction';
-import { galacticDensity } from '../astro/galaxy-model';
-import { passesGaiaSelection } from '../astro/selection';
-import { noisyMagnitude } from '../astro/noise';
 import { yearsSinceEpoch } from '../astro/time';
 
 addEventListener('message', ({ data }) => {
-  const { stars, year, magLimit, exoHosts } = data;
-  console.log(stars, year, magLimit, exoHosts);
-  
-  const exoSet = new Set<string>(exoHosts ?? []);
+  const { stars, year, magLimit } = data;
 
   const positions: number[] = [];
-  const colors: number[] = [];
-
-  const hostFlags: number[] = [];
+  const sizes: number[] = [];
 
   const years = yearsSinceEpoch(year);
 
   for (const s of stars) {
+    // Validate parallax
+    if (!s.parallax || s.parallax <= 0) continue;
+
+    // Distance
+    const distancePc = Math.min(10000, 1000 / s.parallax);
+
     // Proper motion
     const ra = s.ra + ((s.pmra ?? 0) * years) / (1000 * 3600);
     const dec = s.dec + ((s.pmdec ?? 0) * years) / (1000 * 3600);
-
-    // Distance
-    const distancePc = 1000 / s.parallax;
 
     // Coordinates
     const { l, b } = radecToGalactic(ra, dec);
     const [gx, gy, gz] = galacticToCartesian(l, b, distancePc);
     const [x, y, z] = toObserverFrame(gx, gy, gz);
 
-    // Photometry
-    const M = absoluteMagnitude(s.phot_g_mean_mag, distancePc);
-    const A = extinctionMagnitude(distancePc, z);
-    const m0 = apparentMagnitude(M, distancePc, A);
-    const m = noisyMagnitude(m0);
+    // Validate position
+    if (![x, y, z].every(Number.isFinite)) continue;
 
-    // Gaia selection
-    if (!passesGaiaSelection(m)) continue;
+    // Simple magnitude check (no complex selection)
+    if (s.phot_g_mean_mag > magLimit) continue;
 
-    const isHost = exoSet.has(String(s.source_id));
+    // Size based on magnitude (brighter = larger)
+    // Charlie Hoey style: magnitude determines apparent size
+    const magnitude = s.phot_g_mean_mag;
+    const baseSize = Math.pow(10, -0.4 * (magnitude - 5)) * 100;
+    const size = Math.max(1, Math.min(10, baseSize));
 
-    // Limiting magnitude (observer perception)
-    const delta = magLimit - m;
-    if (delta <= 0) continue;
-
-    // Smooth perceptual fade (0.5 mag width)
-    const perceptualWeight = Math.min(1, delta / 0.5);
-
-    // Flux & density
-    const baseFlux = fluxFromMagnitude(m);
-    const density = galacticDensity(x, y, z);
-    const flux = baseFlux * density * perceptualWeight;
-
-    // const brightness = Math.min(1, flux * 3e5);
-
-    const brightness = 0.8;
-
-    hostFlags.push(isHost ? 1 : 0);
     positions.push(x, y, z);
-    colors.push(brightness, brightness, brightness);
+    sizes.push(size);
   }
+
+  console.info('Worker processed:', {
+    input: stars.length,
+    output: positions.length / 3,
+  });
 
   postMessage(
     {
       positions: new Float32Array(positions),
-      colors: new Float32Array(colors),
-      hostFlags: new Float32Array(hostFlags),
+      sizes: new Float32Array(sizes),
     },
     []
   );
