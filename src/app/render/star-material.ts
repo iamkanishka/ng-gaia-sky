@@ -5,56 +5,81 @@ export function createStarMaterial(): THREE.ShaderMaterial {
     transparent: true,
     depthWrite: false,
     vertexColors: true,
-uniforms: {
-  uExposure: { value: 0.6 },
-  uFocusIndex: { value: -1 }
-},
+    blending: THREE.NormalBlending,
 
+    uniforms: {
+      uExposure: { value: 1.2 },
+      uFocusIndex: { value: -1.0 },
+      uTime: { value: 0.0 }
+    },
 
     vertexShader: `
-     attribute float host;
-varying float vHost;
-varying vec3 vColor;
-uniform float uFocusIndex;
-varying float vFocus;
+      attribute float host;
+      attribute float starIndex;
 
-void main() {
-  vColor = color;
+      varying vec3 vColor;
+      varying float vHost;
+      varying float vFocus;
+      varying float vDist;
 
-  // Compare index (cast to float)
-  vFocus = abs(float(gl_VertexID) - uFocusIndex) < 0.5 ? 1.0 : 0.0;
+      uniform float uFocusIndex;
 
-  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-  gl_Position = projectionMatrix * mvPosition;
-  gl_PointSize = 2.0;
-}
+      void main() {
+        vColor = color;
+        vHost = host;
+        vFocus = abs(starIndex - uFocusIndex) < 0.5 ? 1.0 : 0.0;
+
+        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+        vDist = length(mvPosition.xyz);
+
+        gl_Position = projectionMatrix * mvPosition;
+
+        // Gaia-style depth-scaled point size
+        gl_PointSize = clamp(140.0 / vDist, 1.5, 9.0);
+      }
     `,
 
     fragmentShader: `
-     varying vec3 vColor;
-varying float vHost;
-varying float vFocus;
-uniform float uExposure;
+      precision highp float;
 
-void main() {
-  vec2 c = gl_PointCoord - 0.5;
-  float r2 = dot(c, c);
-  float psf = exp(-r2 * 16.0);
+      varying vec3 vColor;
+      varying float vHost;
+      varying float vFocus;
+      varying float vDist;
 
-  vec3 color = vColor * psf * uExposure;
+      uniform float uExposure;
+      uniform float uTime;
 
-if (vFocus > 0.5) {
-  color += vec3(0.15, 0.15, 0.25) * psf;
-}
+      void main() {
+        vec2 uv = gl_PointCoord - 0.5;
+        float r = length(uv);
 
-  // Subtle warm halo for exoplanet hosts
-  if (vHost > 0.5) {
-    color += vec3(0.12, 0.10, 0.04) * psf;
-  }
+        // --- Core + halo PSF ---
+        float core = exp(-r*r * 40.0);
+        float halo = exp(-r*r * 6.0);
+        float psf = core + 0.35 * halo;
 
-  gl_FragColor = vec4(color, psf);
-}
+        if (psf < 0.003) discard;
 
+        // --- Subtle twinkle (distance-damped) ---
+        float twinkle = 1.0 + 0.02 * sin(uTime * 2.0 + vDist * 0.05);
+
+        // --- Eye-response brightness curve ---
+        vec3 color = vColor * psf * uExposure * twinkle;
+        color = pow(color, vec3(0.85)); // perceptual gamma
+
+        // --- Focus glow ---
+        if (vFocus > 0.5) {
+          color += vec3(0.2, 0.2, 0.35) * halo;
+        }
+
+        // --- Exoplanet host warm halo ---
+        if (vHost > 0.5) {
+          color += vec3(0.15, 0.10, 0.05) * halo;
+        }
+
+        gl_FragColor = vec4(color, psf);
+      }
     `,
   });
 }
